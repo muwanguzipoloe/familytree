@@ -19,6 +19,8 @@ from people.relations import describe_relative
 from stronghold.decorators import public
 from taggit.models import Tag
 import json
+from django.contrib.auth.models import User
+
 
 @public
 def index(request):
@@ -34,9 +36,11 @@ def index(request):
 
     surnames = _surnames()
     males = Person.objects.filter(gender='M')
-    male_names = males.values('forename').annotate(Count('forename')).order_by('-forename__count', 'forename')
+    male_names = males.values('forename').annotate(
+        Count('forename')).order_by('-forename__count', 'forename')
     females = Person.objects.filter(gender='F')
-    female_names = females.values('forename').annotate(Count('forename')).order_by('-forename__count', 'forename')
+    female_names = females.values('forename').annotate(
+        Count('forename')).order_by('-forename__count', 'forename')
 
     birth_locations = Location.objects.raw('''SELECT l.id, l.name, l.county_state_province, l.latitude, l.longitude,
                                               COUNT(l.id) AS event_count
@@ -83,10 +87,11 @@ def index(request):
                                  'died': death_locations,
                                  'buried': burial_locations},
                    'tags': tags,
-                   'map_area' : ((min_lat, min_lng), (max_lat, max_lng)),
+                   'map_area': ((min_lat, min_lng), (max_lat, max_lng)),
                    'today': today,
                    'on_this_day': events,
                    'list': Person.objects.select_related('birth')})
+
 
 def _surnames():
     query = '''SELECT surname, n AS count, v FROM
@@ -99,13 +104,21 @@ def _surnames():
         return [(s[0], s[1], s[2]) for s in cursor.fetchall()]
 
 
+# updated person view
 def person(request, person_id):
     person = get_object_or_404(Person, id=person_id)
-    relationship = describe_relative(request.user.person,
+    # selected_user = get_object_or_404(User, id=person.user.id)
+    print("######################################")
+    # print(person.user.id)
+    # print(selected_user.id)
+    print("######################################")
+
+    relationship = describe_relative(person.user,
                                      person,
-                                     request.user.person._ancestor_distances(),
-                                     person._ancestor_distances()) if request.user.person else None
-    expanded_relationship = request.user.person.expand_relationship(person) if relationship else None
+                                     person._ancestor_distances(),
+                                     person._ancestor_distances()) if person.user else None
+    expanded_relationship = request.person.expand_relationship(
+        person) if relationship else None
     return render(request,
                   'people/person.html',
                   {'person': person,
@@ -114,6 +127,30 @@ def person(request, person_id):
                    'relationship': relationship,
                    'expanded_relationship': expanded_relationship,
                    'list': Person.objects.select_related('birth')})
+
+
+# def person(request, person_id):
+#     person = get_object_or_404(Person, id=person_id)
+#     selected_user = get_object_or_404(User, id=person.user.id)
+#     print("######################################")
+#     print(person.user.id)
+#     print(selected_user.id)
+#     print("######################################")
+
+#     relationship = describe_relative(request.user.person,
+#                                      person,
+#                                      request.user.person._ancestor_distances(),
+#                                      person._ancestor_distances()) if request.user.person else None
+#     expanded_relationship = request.user.person.expand_relationship(
+#         person) if relationship else None
+#     return render(request,
+#                   'people/person.html',
+#                   {'person': person,
+#                    'descendants': len(list(person.descendants())),
+#                    'ancestors': len(list(person.ancestors())),
+#                    'relationship': relationship,
+#                    'expanded_relationship': expanded_relationship,
+#                    'list': Person.objects.select_related('birth')})
 
 
 def relatives(request, person_id):
@@ -175,7 +212,8 @@ def ancestors_report(request, person_id):
 def ancestors_report_undead(request, person_id):
     person = get_object_or_404(Person, id=person_id)
     people = [p for p in person.ancestors() if p.deceased and p.death == None]
-    title = 'Deceased ancestors of {0} with unknown death details'.format(person.name())
+    title = 'Deceased ancestors of {0} with unknown death details'.format(
+        person.name())
     return render(request,
                   'people/people.html',
                   {'title': title,
@@ -185,8 +223,10 @@ def ancestors_report_undead(request, person_id):
 
 def ancestors_report_unburied(request, person_id):
     person = get_object_or_404(Person, id=person_id)
-    people = [p for p in person.ancestors() if p.deceased and not p.events.filter(event_type=Event.BURIAL).exists()]
-    title = 'Deceased ancestors of {0} with unknown burial details'.format(person.name())
+    people = [p for p in person.ancestors() if p.deceased and not p.events.filter(
+        event_type=Event.BURIAL).exists()]
+    title = 'Deceased ancestors of {0} with unknown burial details'.format(
+        person.name())
     return render(request,
                   'people/people.html',
                   {'title': title,
@@ -197,7 +237,8 @@ def ancestors_report_unburied(request, person_id):
 def ancestors_report_maiden_names(request, person_id):
     person = get_object_or_404(Person, id=person_id)
     people = [p for p in person.ancestors() if p.has_missing_maiden_name()]
-    title = 'Married female ancestors of {0} with unknown maiden names'.format(person.name())
+    title = 'Married female ancestors of {0} with unknown maiden names'.format(
+        person.name())
     return render(request,
                   'people/people.html',
                   {'title': title,
@@ -215,7 +256,7 @@ def ring_chart(request, person_id):
     person = get_object_or_404(Person, id=person_id)
     return render(request,
                   'people/ringchart.html',
-                  {'person': person, 'list': Person.objects.select_related('birth')}) 
+                  {'person': person, 'list': Person.objects.select_related('birth')})
 
 
 @xframe_options_sameorigin
@@ -245,7 +286,7 @@ def _next_ring(previous_ring):
             ring.append(person.father)
             count += (1 if person.father else 0) + (1 if person.mother else 0)
     # Make sure the list has an entry for evey position.
-    ring.extend([None] * ((len(previous_ring) * 2) - len (ring)))
+    ring.extend([None] * ((len(previous_ring) * 2) - len(ring)))
     return (ring, count)
 
 
@@ -280,7 +321,7 @@ def _people_map(request, people, title):
                   'people/map.html',
                   {'title': title,
                    'locations': counts.keys(),
-                   'map_area' : ((min_lat, min_lng), (max_lat, max_lng)),
+                   'map_area': ((min_lat, min_lng), (max_lat, max_lng)),
                    'list': Person.objects.select_related('birth')})
 
 
@@ -297,6 +338,7 @@ def descendants_tree_svg(request, person_id):
     for (gen, column, person) in _generations(person, 0, 0):
         generations[gen].append((column, person))
     return render(request, 'people/tree.svg', {'person': person, 'generations': generations.values()})
+
 
 def _generations(person, gen, column):
     yield (gen, column, person)
@@ -323,7 +365,8 @@ def location(request, location_id):
 
 
 def region(request, region_name):
-    people = Person.objects.filter(birth__location__county_state_province=region_name)
+    people = Person.objects.filter(
+        birth__location__county_state_province=region_name)
     title = 'People born in ' + region_name
     return render(request,
                   'people/people.html',
@@ -337,9 +380,11 @@ def surname(request, surname):
         canonical = SurnameVariant.objects.get(variant=surname).canonical
     except SurnameVariant.DoesNotExist:
         canonical = surname
-    variants = SurnameVariant.objects.filter(canonical=canonical).values_list('variant', flat=True)
+    variants = SurnameVariant.objects.filter(
+        canonical=canonical).values_list('variant', flat=True)
     all_variants = [canonical] + list(variants)
-    people = Person.objects.filter(Q(surname__in=all_variants) | Q(maiden_name__in=all_variants))
+    people = Person.objects.filter(
+        Q(surname__in=all_variants) | Q(maiden_name__in=all_variants))
     title = 'People with the surname ' + '/'.join(all_variants)
     return render(request,
                   'people/people.html',
@@ -349,7 +394,8 @@ def surname(request, surname):
 
 
 def forename(request, forename):
-    people = Person.objects.filter(Q(forename=forename) | Q(middle_names__contains=forename))
+    people = Person.objects.filter(
+        Q(forename=forename) | Q(middle_names__contains=forename))
     title = 'People with the given name ' + forename
     return render(request,
                   'people/people.html',
@@ -367,6 +413,7 @@ def tag(request, slug):
                    'people': people,
                    'list': Person.objects.select_related('birth')})
 
+
 def alive_in_year(request, year):
     people = _people_alive_in_year(year)
     title = 'People alive (or possibly alive) in {0}'.format(year)
@@ -376,13 +423,16 @@ def alive_in_year(request, year):
                    'people': people,
                    'list': Person.objects.select_related('birth')})
 
+
 def _people_alive_in_year(year):
     year_start = UncertainDate(int(year), 1, 1)
     year_end = UncertainDate(int(year), 12, 31)
     hundred_years_earlier = UncertainDate(int(year) - 100, 1, 1)
     hundred_years_later = UncertainDate(int(year) + 100, 12, 31)
-    born_before = Q(birth__date__lte=year_start) | Q(birth__date=None, death__date__lte=hundred_years_later)
-    died_after = Q(death__date__gte=year_end) | Q(deceased=False) | Q(death__date=None, birth__date__gte=hundred_years_earlier)
+    born_before = Q(birth__date__lte=year_start) | Q(
+        birth__date=None, death__date__lte=hundred_years_later)
+    died_after = Q(death__date__gte=year_end) | Q(deceased=False) | Q(
+        death__date=None, birth__date__gte=hundred_years_earlier)
     return Person.objects.filter(born_before, died_after)
 
 
@@ -390,13 +440,16 @@ def no_census(request, year):
     '''Same as alive_in_year, but filtered to only include people who have no
     census record attached for that year.'''
     people = _people_alive_in_year(year)
-    people = people.exclude(Q(documents__document_type=Document.CENSUS, documents__title__contains=year))
-    title = 'People alive (or possibly alive) in {0} with no corresponding census record'.format(year)
+    people = people.exclude(
+        Q(documents__document_type=Document.CENSUS, documents__title__contains=year))
+    title = 'People alive (or possibly alive) in {0} with no corresponding census record'.format(
+        year)
     return render(request,
                   'people/people.html',
                   {'title': title,
                    'people': people,
                    'list': Person.objects.select_related('birth')})
+
 
 def unknown_maiden_names(request):
     people = [p for p in Person.objects.all() if p.has_missing_maiden_name()]
@@ -406,13 +459,16 @@ def unknown_maiden_names(request):
                    'people': people,
                    'list': Person.objects.select_related('birth')})
 
+
 def unexpanded_initials(request):
-    people = [p for p in Person.objects.all() if len([i for i in p.middle_names.split() if len(i) == 1]) > 0]
+    people = [p for p in Person.objects.all() if len(
+        [i for i in p.middle_names.split() if len(i) == 1]) > 0]
     return render(request,
                   'people/people.html',
                   {'title': 'People with unexpanded initials',
                    'people': people,
                    'list': Person.objects.select_related('birth')})
+
 
 def undead(request):
     people = Person.objects.filter(deceased=True, death=None)
@@ -422,8 +478,10 @@ def undead(request):
                    'people': people,
                    'list': Person.objects.select_related('birth')})
 
+
 def _staff_only(user):
     return user.is_staff
+
 
 @user_passes_test(_staff_only)
 def add_person(request):
@@ -464,7 +522,8 @@ def add_location(request):
     form = AddLocationForm(request.POST)
     if form.is_valid():
         location = form.save()
-        return HttpResponse('{0}|{1}|{2}'.format(location.id, str(location), location.country.country_code)) # 200 OK
+        # 200 OK
+        return HttpResponse('{0}|{1}|{2}'.format(location.id, str(location), location.country.country_code))
     return HttpResponse(json.dumps(form.errors), content_type='application/json', status=422)
 
 
@@ -482,14 +541,17 @@ def surnames(request):
                            WHERE deceased = 1 AND (date = '' OR date IS NULL OR date < '{0}') 
                            GROUP BY s)
                           AS surnames WHERE n >= 2 ORDER BY s'''.format(hundred_years_ago))
-        surnames = [(s[0], _locations_for_surname(s[0])) for s in cursor.fetchall()]
+        surnames = [(s[0], _locations_for_surname(s[0]))
+                    for s in cursor.fetchall()]
     return render(request,
                   'people/surnames.html',
                   {'surnames': surnames,
                    'list': Person.objects.select_related('birth')})
 
+
 def _locations_for_surname(surname):
-    surname_filter = Q(events__person__maiden_name=surname) | (Q(events__person__maiden_name='') & Q(events__person__surname=surname))
+    surname_filter = Q(events__person__maiden_name=surname) | (
+        Q(events__person__maiden_name='') & Q(events__person__surname=surname))
     locations = Location.objects.filter(surname_filter,
                                         events__event_type__in=[0, 3],
                                         events__person__deceased=True).order_by('county_state_province')
@@ -498,3 +560,11 @@ def _locations_for_surname(surname):
     if locations.count() > 1:
         locations = locations.annotate(Count('id')).filter(id__count__gte=2)
     return locations.distinct()
+# TODO
+# Add Relative dropdown
+# ADD PARENT, SPOUSE , SIBLINGS, CHILDREN
+# Visualize family tree.
+# Generate invitation to the user once added if alive
+# Add concent to be viewed by other family members.
+
+# Neural network can come in at this point.

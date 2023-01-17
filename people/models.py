@@ -1,3 +1,6 @@
+from django.contrib.auth.models import PermissionsMixin
+from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
+from django.utils import timezone
 from datetime import date
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -16,6 +19,7 @@ from taggit.models import Tag, TaggedItem
 from tinymce.models import HTMLField
 import os
 import settings
+
 
 class Country(models.Model):
     name = models.CharField(max_length=50)
@@ -56,7 +60,7 @@ class Location(models.Model):
             except Exception as e:
                 # If something goes wrong, there's not much we can do, just leave
                 # the coordinates blank.
-                print (e)
+                print(e)
         super(Location, self).save(*args, **kwargs)
 
     def get_absolute_url(self):
@@ -82,17 +86,24 @@ class Location(models.Model):
 class Person(models.Model):
     '''The main class of the model. Every individual is represented by a person
     record.'''
-    forename = models.CharField(max_length=20, help_text='Forename / given name')
-    middle_names = models.CharField(blank=True, max_length=50, help_text='Middle names(s)')
-    known_as = models.CharField(blank=True, max_length=20, help_text='Known as')
+    forename = models.CharField(
+        max_length=20, help_text='Forename / given name')
+    middle_names = models.CharField(
+        blank=True, max_length=50, help_text='Middle names(s)')
+    known_as = models.CharField(
+        blank=True, max_length=20, help_text='Known as')
     surname = models.CharField(max_length=30, help_text='Surname')
-    maiden_name = models.CharField(blank=True, max_length=30, help_text='Maiden name') # Maiden name is optional.
+    # Maiden name is optional.
+    maiden_name = models.CharField(
+        blank=True, max_length=30, help_text='Maiden name')
     gender = models.CharField(max_length=1,
                               choices=(('M', 'Male'), ('F', 'Female')),
                               blank=False,
                               default=None)
-    birth = models.ForeignKey('Event', models.SET_NULL, null=True, blank=True, related_name='+')
-    death = models.ForeignKey('Event', models.SET_NULL, null=True, blank=True, related_name='+')
+    birth = models.ForeignKey('Event', models.SET_NULL,
+                              null=True, blank=True, related_name='+')
+    death = models.ForeignKey('Event', models.SET_NULL,
+                              null=True, blank=True, related_name='+')
     deceased = models.BooleanField(default=True)
     mother = models.ForeignKey('self',
                                models.SET_NULL,
@@ -110,11 +121,16 @@ class Person(models.Model):
     tags = TaggableManager(blank=True, help_text='Tags')
     # A person can be linked to a user account. This allows a user to see
     # information relevant to their own relationships.
-    user = models.OneToOneField(User, models.SET_NULL, blank=True, null=True)
+    # user = models.OneToOneField(User, models.SET_NULL, blank=True, null=True)
+    user = models.ForeignKey(User,
+                             models.SET_NULL,
+                             blank=True,
+                             null=True)
 
     def name(self, use_middle_names=True, use_maiden_name=False):
         '''Returns the full name of this person.'''
-        name = ' '.join([self.forename, self.middle_names]) if use_middle_names and self.middle_names else self.forename
+        name = ' '.join([self.forename, self.middle_names]
+                        ) if use_middle_names and self.middle_names else self.forename
         if self.known_as:
             name = name + ' "{0}"'.format(self.known_as)
         if self.maiden_name != '':
@@ -148,7 +164,7 @@ class Person(models.Model):
         years = end.year - self.date_of_birth().year
         if end.month and self.date_of_birth().month:
             if end.month < self.date_of_birth().month \
-               or (end.month == self.date_of_birth().month \
+               or (end.month == self.date_of_birth().month
                    and end.day and self.date_of_birth().day and end.day < self.date_of_birth().day):
                 years -= 1
         return years
@@ -178,13 +194,13 @@ class Person(models.Model):
         half-siblings. Siblings are assumed to be full siblings if only one
         parent is known.'''
         return Person.objects.filter(~Q(id=self.id),
-                                     Q(~Q(father=None), father=self.father, mother=self.mother) | \
+                                     Q(~Q(father=None), father=self.father, mother=self.mother) |
                                      Q(~Q(mother=None), mother=self.mother, father=self.father)).order_by('birth__date')
 
     def half_siblings(self):
         '''Returns a list of this person's half-brothers and half-sisters.'''
         return Person.objects.filter(~Q(id=self.id),
-                                     Q(~Q(father=None), ~Q(mother=self.mother), father=self.father) | \
+                                     Q(~Q(father=None), ~Q(mother=self.mother), father=self.father) |
                                      Q(~Q(mother=None), ~Q(father=self.father), mother=self.mother)).order_by('birth__date')
 
     def children(self):
@@ -196,7 +212,8 @@ class Person(models.Model):
         return self.husband_of.all() if self.gender == 'M' else self.wife_of.all()
 
     def timeline(self):
-        timeline = list(self.events.all()) + list(self.marriages().filter(date__isnull=False))
+        timeline = list(self.events.all()) + \
+            list(self.marriages().filter(date__isnull=False))
         timeline.sort(key=attrgetter('date'))
         timeline.sort(key=attrgetter('event_type'))
         return timeline
@@ -222,8 +239,10 @@ class Person(models.Model):
         distances = self._descendant_distances()
         descendants = []
         for descendant in distances.keys():
-            relationship = describe_relative(self, descendant, {}, descendant._ancestor_distances())
-            descendants.append((descendant, relationship, distances[descendant]))
+            relationship = describe_relative(
+                self, descendant, {}, descendant._ancestor_distances())
+            descendants.append(
+                (descendant, relationship, distances[descendant]))
         descendants.sort(key=lambda x: (x[2], x[1], x[0].surname))
         return descendants
 
@@ -266,7 +285,7 @@ class Person(models.Model):
 
     def relatives(self):
         relatives = self._build_relatives_set(set())
-        relatives.discard(self) # This person can't be their own relative.
+        relatives.discard(self)  # This person can't be their own relative.
         return relatives
 
     def _build_relatives_set(self, relatives_set):
@@ -294,9 +313,11 @@ class Person(models.Model):
             distance = distances.get(relative, None)
             relative_distances = relative._ancestor_distances()
             if not distance:
-                (_, d1, d2) = closest_common_ancestor(ancestor_distances, relative_distances)
+                (_, d1, d2) = closest_common_ancestor(
+                    ancestor_distances, relative_distances)
                 distance = max(d1, d2)
-            relationship = describe_relative(self, relative, ancestor_distances, relative_distances)
+            relationship = describe_relative(
+                self, relative, ancestor_distances, relative_distances)
             annotated.append((relative, relationship, distance))
         annotated.sort(key=lambda x: (x[2], x[1], x[0].surname))
         return annotated
@@ -317,7 +338,8 @@ class Person(models.Model):
         elif relative in distances:
             root = [relative]
         else:
-            (root, _, _) = closest_common_ancestor(distances, relative_distances)
+            (root, _, _) = closest_common_ancestor(
+                distances, relative_distances)
 
         ancestors = []
         person = root[0]
@@ -350,15 +372,18 @@ class Person(models.Model):
         return self.tags.all().order_by('name')
 
     def has_missing_maiden_name(self):
-        return self.gender == 'F' and self.wife_of.filter(divorced=False).count() > 0 and (self.maiden_name=='' or self.maiden_name==None)
+        return self.gender == 'F' and self.wife_of.filter(divorced=False).count() > 0 and (self.maiden_name == '' or self.maiden_name == None)
 
     def clean(self):
         if self.date_of_death() and not self.deceased:
-            raise ValidationError('Cannot specify date of death for living person.')
+            raise ValidationError(
+                'Cannot specify date of death for living person.')
         if self.birth and self.birth.person.id != self.id:
-            raise ValidationError('Birth event must refer back to the same person.')
+            raise ValidationError(
+                'Birth event must refer back to the same person.')
         if self.death and self.death.person.id != self.id:
-            raise ValidationError('Death event must refer back to the same person.')
+            raise ValidationError(
+                'Death event must refer back to the same person.')
         if (self.mother and self.mother == self) or (self.father and self.father == self):
             raise ValidationError('Person cannot be their own parent.')
 
@@ -389,7 +414,7 @@ class Event(models.Model):
 
     person = models.ForeignKey(Person, models.CASCADE, related_name='events')
     event_type = models.PositiveSmallIntegerField(choices=EVENT_TYPE)
-    date = UncertainDateField()
+    date = UncertainDateField(blank=True)
     location = models.ForeignKey(Location,
                                  models.SET_NULL,
                                  blank=True,
@@ -454,7 +479,8 @@ class Marriage(models.Model):
         return 'married'
 
     class Meta:
-        ordering = ['husband__surname', 'husband__forename', 'husband__middle_names', 'date']
+        ordering = ['husband__surname', 'husband__forename',
+                    'husband__middle_names', 'date']
 
 
 class Photograph(models.Model):
@@ -497,7 +523,8 @@ class Document(models.Model):
                      (EMIGRATION, 'Emigration/Citizenship')]
 
     file = models.FileField(upload_to='documents', blank=False, null=False)
-    document_type = models.PositiveSmallIntegerField(choices=DOCUMENT_TYPE, blank=False, null=False)
+    document_type = models.PositiveSmallIntegerField(
+        choices=DOCUMENT_TYPE, blank=False, null=False)
     title = models.CharField(max_length=100)
     people = models.ManyToManyField(Person, related_name='documents')
 

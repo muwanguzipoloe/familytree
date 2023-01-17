@@ -38,6 +38,7 @@ urlpatterns = [
     url(r'^person/add/$', views.add_person, name='add_person'),
     url(r'^location/add/$', views.add_location, name='add_location'),
 
+
     url(r'^public/surnames/$', views.surnames, name='surnames'),
 ]
 
